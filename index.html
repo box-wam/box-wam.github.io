@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BoxWAM: Box Trajectories as Compact State Representations for World Action Models</title>
+<meta name="description" content="BoxWAM replaces dense future-video prediction with compact oriented bounding-box trajectories of task-relevant objects, cutting cost while improving robot action prediction." />
+<style>
+  :root{
+    --bg:#0e1016;
+    --bg-soft:#151926;
+    --panel:#ffffff;
+    --ink:#1a1a1a;
+    --ink-soft:#1a1a1a;
+    --ink-faint:#1a1a1a;
+    --line:#e6e6e8;
+    --brand:#1a1a1a;
+    --brand-2:#1a1a1a;
+    --accent:#1a1a1a;
+    --accent-warm:#1a1a1a;
+    --good:#1a1a1a;
+    --radius:16px;
+    --shadow:0 10px 40px rgba(24,28,52,.10);
+    --shadow-sm:0 4px 18px rgba(24,28,52,.08);
+    --maxw:1060px;
+    font-synthesis-weight:none;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:74px}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    background:#ffffff;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--brand);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ---------- top nav ---------- */
+  nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:saturate(160%) blur(12px);
+    background:rgba(255,255,255,.85);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-inner{
+    max-width:var(--maxw);margin:0 auto;padding:12px 24px;
+    display:flex;align-items:center;gap:18px;
+  }
+  .nav-brand{font-weight:700;letter-spacing:-.02em;color:var(--ink);display:flex;align-items:center;gap:9px}
+  .nav-brand .glyph{width:22px;height:22px;flex:0 0 auto}
+  .nav-links{margin-left:auto;display:flex;gap:22px;font-size:.93rem;font-weight:500}
+  .nav-links a{color:var(--ink-soft)}
+  .nav-links a:hover{color:var(--brand);text-decoration:none}
+  @media(max-width:720px){.nav-links{display:none}}
+
+  /* ---------- hero ---------- */
+  header.hero{
+    position:relative;
+    background:#ffffff;
+    color:var(--ink);
+    padding:54px 24px 48px;
+    text-align:center;
+    border-bottom:1px solid var(--line);
+  }
+  .hero-inner{position:relative;max-width:880px;margin:0 auto}
+  h1.title{
+    font-size:clamp(1.6rem,3.2vw,2.3rem);
+    line-height:1.18;letter-spacing:-.02em;font-weight:700;
+    margin:0 auto 8px;max-width:24ch;color:var(--ink);
+  }
+  h1.title .accent{color:var(--ink)}
+  .subtitle{color:var(--ink);font-size:1.02rem;margin:14px auto 4px;max-width:60ch}
+  .authors{margin-top:20px;color:var(--ink);font-size:1.0rem;font-weight:500}
+  .affil{color:var(--ink);font-size:.92rem;margin-top:4px}
+
+  .links{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:30px}
+  .btn{
+    display:inline-flex;align-items:center;gap:9px;
+    padding:11px 19px;border-radius:11px;font-weight:600;font-size:.96rem;
+    transition:transform .15s ease, box-shadow .2s ease, background .2s ease;
+    border:1px solid transparent;
+  }
+  .btn:hover{text-decoration:none;transform:translateY(-2px)}
+  .btn.primary{background:var(--ink);color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.16)}
+  .btn.primary:hover{background:#000}
+  .btn.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+  .btn.ghost:hover{background:#f4f5fb}
+  .btn svg{width:17px;height:17px}
+
+  /* ---------- layout ---------- */
+  main{max-width:var(--maxw);margin:0 auto;padding:18px 24px 40px}
+  section{
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);box-shadow:var(--shadow-sm);
+    padding:34px 38px;margin-top:26px;
+  }
+  .eyebrow{
+    display:inline-block;font-size:.78rem;font-weight:700;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--brand);margin-bottom:10px;
+  }
+  section h2{font-size:1.55rem;letter-spacing:-.02em;font-weight:750;margin-bottom:4px}
+  section h2 + .lede{color:var(--ink-soft);font-size:1.02rem;margin:10px 0 4px}
+  section h3{font-size:1.1rem;font-weight:700;margin:22px 0 8px;color:var(--ink)}
+  section p{color:var(--ink-soft);margin:10px 0}
+  section p strong{color:var(--ink)}
+  @media(max-width:620px){section{padding:26px 22px}}
+
+  /* abstract */
+  .abstract{
+    border-left:3px solid var(--line);
+    padding:6px 0 6px 20px;color:var(--ink);font-size:1.04rem;
+  }
+
+  /* ---------- video figure ---------- */
+  .video-shell{
+    margin:8px 0 4px;border-radius:14px;overflow:hidden;
+    background:#0b0d14;border:1px solid var(--line);box-shadow:var(--shadow);
+  }
+  .ratio{position:relative;width:100%;padding-bottom:56.25%;background:#0b0d14}
+  .ratio video{position:absolute;inset:0;width:100%;height:100%;display:block;background:#0b0d14}
+  figcaption{color:var(--ink-faint);font-size:.9rem;margin-top:12px;text-align:center}
+  figcaption b{color:var(--ink-soft);font-weight:600}
+
+  /* ---------- demo switcher ---------- */
+  .tabs{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 20px}
+  .tab{
+    cursor:pointer;border:1px solid var(--line);background:#fff;
+    padding:11px 16px;border-radius:12px;text-align:left;
+    transition:border-color .18s, box-shadow .18s, transform .12s;
+    display:flex;align-items:center;gap:11px;flex:1 1 180px;min-width:160px;
+  }
+  .tab:hover{transform:translateY(-1px);border-color:#cfd2e6}
+  .tab .ic{width:34px;height:34px;border-radius:9px;flex:0 0 auto;display:grid;place-items:center;
+    background:#f0f0f1;color:var(--ink)}
+  .tab .ic svg{width:18px;height:18px}
+  .tab .meta{display:flex;flex-direction:column;line-height:1.25}
+  .tab .meta .t{font-weight:700;font-size:.95rem;color:var(--ink)}
+  .tab .meta .s{font-size:.78rem;color:var(--ink-faint)}
+  .tab[aria-selected="true"]{
+    border-color:var(--ink);box-shadow:0 0 0 2px rgba(0,0,0,.10);
+    background:#fafafa;
+  }
+  .tab[aria-selected="true"] .ic{background:var(--ink);color:#fff}
+
+  .demo-info{
+    display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;
+    margin-top:16px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:#fbfbfe;
+  }
+  .demo-info .desc{flex:1 1 320px;color:var(--ink-soft);font-size:.97rem;margin:0}
+  .demo-info .desc b{color:var(--ink)}
+
+  /* ---------- method pills ---------- */
+  .feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px}
+  .feature{border:1px solid var(--line);border-radius:13px;padding:18px;background:#fbfbfe}
+  .feature .fic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
+    background:#f0f0f1;margin-bottom:10px;color:var(--ink)}
+  .feature .fic svg{width:20px;height:20px}
+  .feature h3{font-size:1.02rem;font-weight:700;margin:0 0 6px}
+  .feature p{font-size:.92rem;margin:0;color:var(--ink-soft)}
+  @media(max-width:760px){.feature-grid{grid-template-columns:1fr}}
+
+  .pipeline{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 4px;align-items:stretch}
+  .pstep{flex:1 1 150px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff;position:relative}
+  .pstep .n{font-size:.74rem;font-weight:800;color:var(--brand);letter-spacing:.08em}
+  .pstep .h{font-weight:700;font-size:.96rem;margin:3px 0 4px}
+  .pstep .d{font-size:.85rem;color:var(--ink-soft)}
+  .pstep .arrow{position:absolute;right:-13px;top:50%;transform:translateY(-50%);color:#c7cbe0;font-size:1.2rem;z-index:2}
+  @media(max-width:760px){.pstep .arrow{display:none}}
+
+  /* ---------- tables ---------- */
+  .table-wrap{position:relative;overflow-x:auto;margin:14px 0 4px;border:1px solid var(--line);border-radius:12px}
+  .table-wrap::after{content:"";position:absolute;top:0;right:0;width:22px;height:100%;pointer-events:none;
+    background:linear-gradient(to right,rgba(255,255,255,0),#fff);border-radius:0 12px 12px 0}
+  table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:520px}
+  .table-wrap.wide table{min-width:680px}
+  caption{caption-side:top;text-align:left;font-size:.86rem;color:var(--ink-faint);padding:0 0 10px}
+  thead th{
+    background:#f4f5fb;color:var(--ink-soft);font-weight:700;font-size:.82rem;
+    text-align:right;padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  thead th:first-child{text-align:left}
+  tbody td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line);color:var(--ink-soft);white-space:nowrap}
+  tbody td:first-child{text-align:left;color:var(--ink);font-weight:600}
+  tbody tr:last-child td{border-bottom:none}
+  /* pin the row-label column so it stays visible while metrics scroll on mobile */
+  thead th:first-child,tbody td:first-child{position:sticky;left:0;z-index:1}
+  thead th:first-child{background:#f4f5fb}
+  tbody td:first-child{background:#fff;box-shadow:1px 0 0 var(--line)}
+  tr.ours td{background:#f4f4f5;color:var(--ink)}
+  tr.ours td:first-child{color:var(--ink);font-weight:800;background:#f4f4f5}
+  tr.muted td:first-child{color:var(--ink-faint);font-weight:500}
+  .best{color:var(--good);font-weight:800}
+  .tag-depth{font-size:.7rem;color:var(--ink-faint);font-weight:500}
+  .table-note{font-size:.82rem;color:var(--ink-faint);margin:8px 2px 0}
+
+  footer{
+    max-width:var(--maxw);margin:10px auto 50px;padding:24px;text-align:center;
+    color:var(--ink-faint);font-size:.86rem;
+  }
+  footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav>
+  <div class="nav-inner">
+    <span class="nav-brand">
+      <svg class="glyph" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="2" stroke-linejoin="round">
+        <rect x="3" y="6" width="13" height="13" rx="1.5"/>
+        <path d="M8 3h13v13" opacity=".55"/>
+        <path d="M16 6l5-3M16 19l5-3" opacity=".55"/>
+      </svg>
+      BoxWAM
+    </span>
+    <div class="nav-links">
+      <a href="#walkthrough">Walkthrough</a>
+      <a href="#method">Method</a>
+      <a href="#demos">Real-World</a>
+      <a href="#results">Results</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <div class="hero-inner">
+    <h1 class="title">Box Trajectories as <span class="accent">Compact State Representations</span> for World Action Models</h1>
+    <p class="subtitle">A world action model that imagines compact, object-centric box futures instead of dense video, guiding robot action prediction.</p>
+    <div class="authors">Anonymous Authors</div>
+    <div class="affil">Submitted to the 10th Conference on Robot Learning (CoRL 2026)</div>
+    <div class="links">
+      <a class="btn primary" href="#walkthrough">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Watch walkthrough
+      </a>
+      <a class="btn ghost" href="#demos">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M7 7V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3"/></svg>
+        Real-robot demos
+      </a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ WALKTHROUGH ============ -->
+  <section id="walkthrough">
+    <span class="eyebrow">Overview</span>
+    <figure>
+      <div class="video-shell">
+        <div class="ratio">
+          <video controls preload="metadata" playsinline poster="posters/walkthrough.jpg">
+            <source src="walkthrough.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+    </figure>
+  </section>
+
+  <!-- ============ ABSTRACT ============ -->
+  <section id="abstract">
+    <span class="eyebrow">Abstract</span>
+    <h2>What is the minimal future a robot needs to imagine?</h2>
+    <p class="abstract">
+      World action models (WAMs) are policy models that explicitly predict both actions and future world states, and have been shown to outperform action-only models across robotic manipulation tasks. However, representing the future with full-frame video prediction is computationally expensive during both training and inference. This raises a central question: <strong>what is the minimal state representation that preserves the planning and supervision benefits of future prediction?</strong> We propose <strong>BoxWAM</strong>, which replaces dense future frames with oriented bounding-box trajectories of task-relevant objects. By explicitly imagining object-centric future motion, our method provides a lightweight prediction target that captures the key physical changes induced by robot actions. Box-trajectory prediction substantially reduces computational cost while improving action-prediction performance, suggesting that object-centric compact states are an efficient alternative to video-based world action modeling for manipulation.
+    </p>
+  </section>
+
+  <!-- ============ METHOD ============ -->
+  <section id="method">
+    <span class="eyebrow">Method</span>
+    <p class="lede">Each object's future is the image-plane location of the 8 corners of its minimum-volume oriented 3D bounding box: a 16-dimensional vector per object that keeps coarse shape and motion while discarding background texture, lighting, and shadows.</p>
+
+    <div class="feature-grid">
+      <div class="feature">
+        <div class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 21 7v10l-9 4.5L3 17V7z"/><path d="M3 7l9 4.5L21 7"/><path d="M12 11.5V21.5"/></svg></div>
+        <h3>Object-centric box states</h3>
+        <p>The whole future state is the box trajectory of the <em>actively manipulated</em> object: the one the gripper is touching, or about to touch. The active box automatically shifts across task stages (e.g. pod → machine → mug).</p>
+      </div>
+      <div class="feature">
+        <div class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9c3.3-5 6.7-5 10 0s6.7 5 10 0"/><path d="M2 15c3.3-5 6.7-5 10 0s6.7 5 10 0"/></svg></div>
+        <h3>Flow matching</h3>
+        <p>A flow-matching DiT jointly denoises future box tokens and action tokens. Frozen DINOv3 encodes the scene + wrist views into context; proprioception &amp; flow-time enter via adaptive layer-norm.</p>
+      </div>
+      <div class="feature">
+        <div class="fic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg></div>
+        <h3>Causal attention</h3>
+        <p>A causal mask lets <em>actions attend to imagined future boxes</em>, but stops boxes from attending to future actions, so the box trajectory acts as an object-motion plan that steers, not follows, the action chunk.</p>
+      </div>
+    </div>
+
+    <h3>Inference pipeline</h3>
+    <div class="pipeline">
+      <div class="pstep"><div class="n">STEP 1</div><div class="h">Encode</div><div class="d">Scene + wrist images → DINOv3 visual context tokens.</div><span class="arrow" aria-hidden="true">→</span></div>
+      <div class="pstep"><div class="n">STEP 2</div><div class="h">Imagine</div><div class="d">Denoise H future box tokens, the object-motion plan.</div><span class="arrow" aria-hidden="true">→</span></div>
+      <div class="pstep"><div class="n">STEP 3</div><div class="h">Act</div><div class="d">Action tokens attend to boxes &amp; context to denoise the chunk.</div><span class="arrow" aria-hidden="true">→</span></div>
+      <div class="pstep"><div class="n">STEP 4</div><div class="h">Execute</div><div class="d">Run the chunk on the robot, then replan.</div></div>
+    </div>
+  </section>
+
+  <!-- ============ REAL-WORLD DEMOS (switcher) ============ -->
+  <section id="demos">
+    <span class="eyebrow">Real Robot</span>
+    <h2>Real-world demonstrations</h2>
+    <p class="lede">Deployed on a single-arm <strong>UFACTORY xArm7</strong> with a third-person scene camera and a wrist camera, trained from GELLO teleoperation demos (50 per task).</p>
+
+    <div class="tabs" role="tablist" aria-label="Real-world demo tasks">
+      <button class="tab" role="tab" id="tab-coffee" aria-controls="demoPanel" aria-selected="true" tabindex="0" data-key="coffee">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h12v3.5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M17 10h1.6a2.4 2.4 0 0 1 0 4.8H17"/><path d="M8 2.6c-.6 1 .6 1.6 0 3M12 2.6c-.6 1 .6 1.6 0 3"/></svg></span>
+        <span class="meta"><span class="t">Make Coffee</span><span class="s">long-horizon task</span></span>
+      </button>
+      <button class="tab" role="tab" id="tab-water" aria-controls="demoPanel" aria-selected="false" tabindex="-1" data-key="water">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-7"/><path d="M12 14c-3.3 0-5-2.2-5-5 3.3 0 5 2.2 5 5z"/><path d="M12 12c0-3.3 2.2-5.5 5.5-5.5C17.5 9.8 15.3 12 12 12z"/><path d="M7.5 21h9"/></svg></span>
+        <span class="meta"><span class="t">Water Plant</span><span class="s">distracting objects</span></span>
+      </button>
+      <button class="tab" role="tab" id="tab-pokemon" aria-controls="demoPanel" aria-selected="false" tabindex="-1" data-key="pokemon">
+        <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="8.5" width="17" height="12" rx="1.5"/><path d="M3.5 12.5h17M12 8.5v12"/><path d="M12 8.5C12 8.5 9.8 4 7.4 5.1 5.6 6 7.2 8.5 12 8.5zM12 8.5c0 0 2.2-4.5 4.6-3.4C18.4 6 16.8 8.5 12 8.5z"/></svg></span>
+        <span class="meta"><span class="t">Place Toy</span><span class="s">deformable object</span></span>
+      </button>
+    </div>
+
+    <figure role="tabpanel" id="demoPanel" aria-labelledby="tab-coffee" tabindex="0">
+      <div class="video-shell">
+        <div class="ratio">
+          <video id="demoVideo" controls muted preload="metadata" playsinline poster="posters/make_coffee.jpg">
+            <source id="demoSource" src="make_coffee.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+      <div class="demo-info" aria-live="polite">
+        <p class="desc" id="demoDesc"><b>Make Coffee.</b> A long-horizon task: the arm grasps the coffee mug and places it under the coffee machine, then grasps a K-cup pod, loads it into the machine, and closes the lid.</p>
+      </div>
+    </figure>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section id="results">
+    <span class="eyebrow">Results</span>
+    <h2>BoxWAM improves action prediction at near-zero extra cost</h2>
+    <p class="lede">Across simulation and real robots, predicting compact box futures beats action-only imitation, while adding only a few milliseconds of inference latency compared with the tens of milliseconds that dense video or latent futures cost.</p>
+
+    <h3>Real-world manipulation</h3>
+    <div class="table-wrap wide">
+      <table>
+        <caption>Table 3. Real-world success rate (SR) and subgoal progress rate (%), same execution protocol, randomized object poses.</caption>
+        <thead>
+          <tr><th>Method</th><th>Coffee SR</th><th>Coffee Prog.</th><th>Water SR</th><th>Water Prog.</th><th>Pokémon SR</th><th>Pokémon Prog.</th><th>Average</th></tr>
+        </thead>
+        <tbody>
+          <tr class="muted"><td>Diffusion Policy</td><td>10.0</td><td>34.0</td><td>8.0</td><td>9.4</td><td>34.0</td><td>47.0</td><td>23.7</td></tr>
+          <tr><td>Ours, action-only</td><td>24.0</td><td>48.0</td><td>48.0</td><td>54.7</td><td>60.0</td><td>72.0</td><td>51.1</td></tr>
+          <tr class="ours"><td>BoxWAM</td><td class="best">26.0</td><td class="best">54.4</td><td class="best">66.0</td><td class="best">70.7</td><td class="best">70.0</td><td class="best">78.0</td><td class="best">60.85</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Single-task simulation on RoboTwin2.0</h3>
+    <div class="table-wrap">
+      <table>
+        <caption>Table 1. Average success rate (%) over 9 tasks. Baselines from the RoboTwin2.0 leaderboard.</caption>
+        <thead>
+          <tr><th>Method</th><th>Observation</th><th>Clean</th><th>Randomized</th></tr>
+        </thead>
+        <tbody>
+          <tr class="muted"><td>Diffusion Policy</td><td>1× RGB</td><td>55.4</td><td>0.7</td></tr>
+          <tr class="muted"><td>ACT</td><td>3× RGB</td><td>60.4</td><td>6.3</td></tr>
+          <tr class="muted"><td>DP3 <span class="tag-depth">(uses depth)</span></td><td>1× RGB-D</td><td>81.2</td><td>5.1</td></tr>
+          <tr class="muted"><td>π0</td><td>3× RGB</td><td>71.4</td><td>33.1</td></tr>
+          <tr><td>Ours, action-only (Flow)</td><td>1× RGB</td><td>73.2</td><td>32.6</td></tr>
+          <tr class="ours"><td>BoxWAM</td><td>1× RGB</td><td>78.3</td><td class="best">37.8</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">Best randomized-setting average, and best among RGB-only methods in the clean setting (only depth-based DP3 scores higher).</p>
+
+    <h3>Multi-task generalist on RoboTwin2.0</h3>
+    <div class="table-wrap">
+      <table>
+        <caption>Table 2. Multi-task pretraining (50 tasks × 50 demos). Success rate (%) and inference latency (ms) at 10 denoising steps.</caption>
+        <thead>
+          <tr><th>Method</th><th>Clean</th><th>Randomized</th><th>Latency</th></tr>
+        </thead>
+        <tbody>
+          <tr class="muted"><td>π0.5</td><td>52.6</td><td>26.9</td><td>55.3 ms</td></tr>
+          <tr class="ours"><td>π0.5 + BoxWAM</td><td class="best">61.5</td><td class="best">34.0</td><td>57.7 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Why boxes? Efficiency ablation</h3>
+    <div class="table-wrap">
+      <table>
+        <caption>Table 4. Future-state representation ablation. Latency on the real-world 3-camera setup, 50 denoising steps.</caption>
+        <thead>
+          <tr><th>Future state</th><th>Latency</th><th>Clean</th><th>Randomized</th></tr>
+        </thead>
+        <tbody>
+          <tr class="muted"><td>Action only</td><td class="best">168.3 ms</td><td>73.2</td><td>32.6</td></tr>
+          <tr class="muted"><td>Dense video (Wan2.2 VAE)</td><td>250.5 ms</td><td>80.1</td><td>34.5</td></tr>
+          <tr class="muted"><td>Latent (DINOv3 ViT-L)</td><td>251.4 ms</td><td>69.9</td><td>29.0</td></tr>
+          <tr class="ours"><td>Box trajectory (ours)</td><td>172.4 ms</td><td>78.3</td><td class="best">37.8</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">Box futures add just <strong>+4.1 ms</strong> over action-only while improving accuracy. Dense video and latent futures add ~82 ms and don't reliably help. (BoxWAM converges in 6k steps vs. 15k for the dense variants.)</p>
+
+    <h3>Attention ablation</h3>
+    <div class="table-wrap">
+      <table>
+        <caption>Table 5. How future-state and action tokens should interact during generation (% success).</caption>
+        <thead>
+          <tr><th>Design</th><th>Attention</th><th>Clean</th><th>Randomized</th></tr>
+        </thead>
+        <tbody>
+          <tr class="muted"><td>Action-only</td><td>N/A</td><td>73.2</td><td>32.6</td></tr>
+          <tr class="muted"><td>Fully separate</td><td>State ⟂ Action</td><td>76.6</td><td>37.4</td></tr>
+          <tr class="muted"><td>Fully joint</td><td>State ⇔ Action</td><td>76.7</td><td>32.9</td></tr>
+          <tr class="muted"><td>Action → Future</td><td>State ⇒ Action</td><td>76.1</td><td>35.5</td></tr>
+          <tr class="ours"><td>Future → Action (BoxWAM)</td><td>State ⇐ Action</td><td class="best">78.3</td><td class="best">37.8</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">BoxWAM works best when actions can attend to imagined future boxes, but boxes cannot attend to future actions. In other words, the box plan leads.</p>
+  </section>
+
+
+</main>
+
+<footer>
+  <p>BoxWAM · Box Trajectories as Compact State Representations for World Action Models · Under review at CoRL 2026.</p>
+</footer>
+
+<script>
+  // ---- Real-world demo switcher ----
+  const DEMOS = {
+    coffee: {
+      src: "make_coffee.mp4",
+      poster: "posters/make_coffee.jpg",
+      desc: "<b>Make Coffee.</b> A long-horizon task: the arm grasps the coffee mug and places it under the coffee machine, then grasps a K-cup pod, loads it into the machine, and closes the lid."
+    },
+    water: {
+      src: "water_plant.mp4",
+      poster: "posters/water_plant.jpg",
+      desc: "<b>Water Plant.</b> The arm picks up the watering bottle and pours water onto the plant, with distracting objects randomly placed on the table."
+    },
+    pokemon: {
+      src: "place_pokemon.mp4",
+      poster: "posters/place_pokemon.jpg",
+      desc: "<b>Place Toy.</b> A pick-and-place task: the arm grasps a <b>deformable</b> toy and sets it onto a plate."
+    }
+  };
+
+  const video  = document.getElementById('demoVideo');
+  const source = document.getElementById('demoSource');
+  const elDesc = document.getElementById('demoDesc');
+  const panel  = document.getElementById('demoPanel');
+  const tabs   = Array.from(document.querySelectorAll('.tab'));
+
+  function selectDemo(key, {play=false} = {}) {
+    const d = DEMOS[key];
+    if (!d) return;
+    tabs.forEach(t => {
+      const on = t.dataset.key === key;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;            // roving tabindex (WAI-ARIA tabs pattern)
+    });
+    if (panel) panel.setAttribute('aria-labelledby', 'tab-' + key);
+    source.src = d.src;
+    video.poster = d.poster;
+    elDesc.innerHTML = d.desc;
+    video.load();
+    if (play) { video.play().catch(() => {}); }
+  }
+
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => selectDemo(t.dataset.key, {play:true}));
+    t.addEventListener('keydown', (e) => {
+      let next = null;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % tabs.length;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = tabs.length - 1;
+      if (next === null) return;
+      e.preventDefault();
+      selectDemo(tabs[next].dataset.key, {play:true});
+      tabs[next].focus();
+    });
+  });
+  selectDemo('coffee');   // initial state
+</script>
+</body>
+</html>
